@@ -79,7 +79,8 @@ try:
 
         # For now, let's just do the first 5 to test the logic
         print(f"Loaded {len(swimmers_list)} names. Running test on the first 5...")
-        swimmers_list = swimmers_list[:5]
+       # Uncomment the line below to run a small test instead of the full list
+        # swimmers_list = swimmers_list[:5] # <-- Uncomment if you want to see a sample of 5 swimmers
 
 except FileNotFoundError:
     print("Error: 'swimmers_list.txt' not found. Did you run scraper.py?")
