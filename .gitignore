@@ -1,0 +1,9 @@
+# Ignore the virtual environment folder
+venv/
+__pycache__/
+
+# Ignore environment variables (SECRET KEYS)
+.env
+
+# Ignore system files
+.DS_Store
