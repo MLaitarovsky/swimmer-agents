@@ -14,19 +14,24 @@ The system automates the process of "Headhunting" by:
 * **BeautifulSoup4** (Web Scraping)
 * **OpenAI API** (Intelligence)
 * **Serper API** (Google Search capability)
+* **Docker** (Containerization)
 
 ## ⚙️ How it Works
 1.  `scraper.py`: Fetches the latest list of swimmers using a custom User-Agent to bypass protections.
 2.  `main.py`: Initiates the Agent Crew.
-    * **Agent A (Researcher):** searchs for professional footprints.
+    * **Agent A (Researcher):** searches for professional footprints.
     * **Agent B (Analyst):** applies strict logic to classify "Key Positions".
 3.  **Output:** Generates a structured `swimmers_report_final.csv` for analysis.
 
-## 🚀 Installation
+## 🚀 Installation (Local)
 1. Clone the repo
 2. Install dependencies: `pip install -r requirements.txt`
 3. Add API keys to `.env`
 4. Run `python main.py`
 
-## 📊 Results
-The system successfully identifies former athletes who have transitioned into high-tech roles, specifically looking for leadership qualities similar to their athletic achievements.
+## 🐳 Docker Support
+Don't want to mess with Python environments? You can run the entire system in a container.
+
+1. **Build the image:**
+```bash
+docker build -t swimmer-agent .
