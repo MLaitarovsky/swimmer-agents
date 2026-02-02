@@ -1,0 +1,7 @@
+crewai
+crewai-tools
+requests
+beautifulsoup4
+python-dotenv
+openai
+langchain

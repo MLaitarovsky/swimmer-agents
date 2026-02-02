@@ -5,107 +5,113 @@ from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from crewai_tools import SerperDevTool
 
-# 1. Load Keys
 load_dotenv()
 
-# Check for keys
+# Setup
 if not os.getenv("OPENAI_API_KEY") or not os.getenv("SERPER_API_KEY"):
-    print("Error: API keys not found. Check your .env file.")
+    print("Error: API keys not found.")
     exit()
 
-# 2. Setup Tools
 search_tool = SerperDevTool()
 
-# 3. Define the Agents (The Workers)
-# We must define ALL agents BEFORE using them in the loop
-
+# --- AGENT 1: RESEARCHER ---
 researcher = Agent(
     role="Senior Career Researcher",
     goal="Find current professional details about former swimmers.",
-    backstory="""You are an expert headhunter specialized in the Israeli sports industry.
-    You know how to track down former athletes and find out what companies they work for
-    and what their current job titles are.""",
+    backstory="""You are an expert headhunter. You find accurate career info on former athletes.
+    You are persistent. If you find a LinkedIn profile, you extract the headline.""",
     verbose=True,
     tools=[search_tool],
 )
 
-# --- THIS WAS MISSING IN YOUR CODE ---
+# --- AGENT 2: ANALYST (FIXED LOGIC) ---
 analyst = Agent(
     role="Talent Analyst",
     goal='Determine if a candidate holds a "Key Position" in the industry.',
-    backstory="""You are a VC investor looking for strong connections. 
-    You analyze job titles and company sizes. 
-    You are looking for: C-Level (CEO, CTO), VPs, Directors, Founders, or Senior Engineers.""",
+    backstory="""You are a VC investor looking for decision-makers.
+    You analyze job titles carefully.
+    
+    CRITICAL RULES FOR "KEY POSITION":
+    1. YES: Co-founder, Founder, Owner, Partner.
+    2. YES: C-Level (CEO, CTO, COO, CMO, CFO).
+    3. YES: VP (Vice President), Director, Head of [Department].
+    4. YES: Senior/Lead roles in Tech/Engineering (e.g., Senior Backend Engineer, Team Lead).
+    5. NO: Manager (if not senior), Associate, Student, Coach, Retired.""",
     verbose=True,
 )
-# -------------------------------------
 
 
-# 4. Define the CSV Saving Function
 def save_results_to_csv(results_list):
-    filename = "swimmers_report.csv"
+    filename = "swimmers_report_final.csv"
     with open(filename, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        # Header
-        writer.writerow(["Name", "Role", "Company", "Is Key Position"])
+        writer.writerow(["Name", "Role", "Company", "Is Key Position", "Reason"])
 
         for result in results_list:
             try:
-                # Clean the output string from markdown
                 clean_json = (
                     str(result).replace("```json", "").replace("```", "").strip()
                 )
                 data = json.loads(clean_json)
-
                 writer.writerow(
                     [
                         data.get("name", "Unknown"),
                         data.get("role", "Unknown"),
                         data.get("company", "Unknown"),
                         data.get("is_key", "Unknown"),
+                        data.get("reason", ""),
                     ]
                 )
             except:
-                # If the AI returns unstructured text, save it safely
-                writer.writerow([str(result), "Error", "Error", "Error"])
-
+                writer.writerow([str(result), "Error", "Error", "Error", ""])
     print(f"\n✅ Success! Results saved to {filename}")
 
 
-# 5. The List of Targets
-swimmers_list = ["Gal Nevo", "Yakov Toumarkin", "Guy Barnea", "Amit Ivry"]
+# --- LOAD NAMES FROM FILE ---
+# This reads the list you just scraped!
+try:
+    with open("swimmers_list.txt", "r", encoding="utf-8") as f:
+        # Read lines and strip whitespace (limit to first 5 for testing to save time/money)
+        swimmers_list = [line.strip() for line in f.readlines() if line.strip()]
+
+        # PRO TIP: Uncomment this line to run ALL names (warning: takes a long time)
+        # swimmers_list = swimmers_list
+
+        # For now, let's just do the first 5 to test the logic
+        print(f"Loaded {len(swimmers_list)} names. Running test on the first 5...")
+        swimmers_list = swimmers_list[:5]
+
+except FileNotFoundError:
+    print("Error: 'swimmers_list.txt' not found. Did you run scraper.py?")
+    exit()
 
 results = []
 
-print(f"Starting research on {len(swimmers_list)} swimmers...")
-
-# 6. The Execution Loop
 for swimmer_name in swimmers_list:
     print(f"\n--- Processing: {swimmer_name} ---")
 
-    # Task 1: Search
     task_search = Task(
         description=f"""
-        Search for the former Israeli swimmer '{swimmer_name}'. 
-        Verification: Ensure the result matches the athlete profile (Swimming/Israel).
+        Search for '{swimmer_name}' (Israeli Olympic Swimmer). 
         Find their current Job Title and Company.
+        Verification: Ensure it is the swimmer, not a different person.
         """,
         expected_output="Profile with Name, Role, and Company.",
         agent=researcher,
     )
 
-    # Task 2: Analyze
     task_analyze = Task(
         description=f"""
         Analyze the role found for '{swimmer_name}'.
-        Is it a 'Key Position' (VP, CEO, Director, Founder, Senior Tech)?
+        Is it a 'Key Position' based on your rules?
         
         Output ONLY a JSON format:
         {{
             "name": "{swimmer_name}",
             "role": "...",
             "company": "...",
-            "is_key": "Yes/No"
+            "is_key": "Yes/No",
+            "reason": "Why you decided Yes or No"
         }}
         """,
         expected_output="JSON object.",
@@ -113,16 +119,13 @@ for swimmer_name in swimmers_list:
         context=[task_search],
     )
 
-    # Create Crew
     crew = Crew(
         agents=[researcher, analyst],
         tasks=[task_search, task_analyze],
         process=Process.sequential,
     )
 
-    # Run
     output = crew.kickoff()
     results.append(output)
 
-# 7. Final Step: Save to File
 save_results_to_csv(results)
