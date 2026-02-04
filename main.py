@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+import pandas as pd  # <--- New Import
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from crewai_tools import SerperDevTool
@@ -24,7 +25,7 @@ researcher = Agent(
     tools=[search_tool],
 )
 
-# --- AGENT 2: ANALYST (FIXED LOGIC) ---
+# --- AGENT 2: ANALYST ---
 analyst = Agent(
     role="Talent Analyst",
     goal='Determine if a candidate holds a "Key Position" in the industry.',
@@ -41,6 +42,21 @@ analyst = Agent(
 )
 
 
+def load_swimmers_from_csv(csv_path):
+    """Loads the list of names from your new CSV"""
+    try:
+        df = pd.read_csv(csv_path)
+        # Ensure the column name matches your CSV (it was 'Name')
+        if "Name" in df.columns:
+            return df["Name"].tolist()
+        else:
+            print(f"❌ Error: Column 'Name' not found in {csv_path}")
+            return []
+    except Exception as e:
+        print(f"❌ Error reading CSV: {e}")
+        return []
+
+
 def save_results_to_csv(results_list):
     filename = "swimmers_report_final.csv"
     with open(filename, mode="w", newline="", encoding="utf-8") as file:
@@ -49,6 +65,7 @@ def save_results_to_csv(results_list):
 
         for result in results_list:
             try:
+                # Clean the output string to ensure valid JSON
                 clean_json = (
                     str(result).replace("```json", "").replace("```", "").strip()
                 )
@@ -67,65 +84,81 @@ def save_results_to_csv(results_list):
     print(f"\n✅ Success! Results saved to {filename}")
 
 
-# --- LOAD NAMES FROM FILE ---
-# This reads the list you just scraped!
-try:
-    with open("swimmers_list.txt", "r", encoding="utf-8") as f:
-        # Read lines and strip whitespace (limit to first 5 for testing to save time/money)
-        swimmers_list = [line.strip() for line in f.readlines() if line.strip()]
+# --- MAIN EXECUTION ---
+if __name__ == "__main__":
 
-        # Uncomment this line to run ALL names (warning: takes a long time)
-        swimmers_list = swimmers_list
+    # 1. Load the names from your new CSV file
+    csv_file = "all_swimmers_cleaned.csv"
+    print(f"📂 Loading swimmers from {csv_file}...")
+    swimmers_list = load_swimmers_from_csv(csv_file)
 
-        print(f"Loaded {len(swimmers_list)} names. Running test...")
-    # Uncomment the line below to run a small test instead of the full list
-    # swimmers_list = swimmers_list[:5] # <-- Uncomment if you want to see a sample of 5 swimmers
+    # 🛑 BATCH CONTROL (Very Important!)
+    # Change this number to 100 or 1000 later when you are ready.
+    BATCH_SIZE = 10
 
-except FileNotFoundError:
-    print("Error: 'swimmers_list.txt' not found. Did you run scraper.py?")
-    exit()
+    if swimmers_list:
+        swimmers_list = swimmers_list[:BATCH_SIZE]
+        print(f"🚀 Starting Research on first {len(swimmers_list)} swimmers...")
+    else:
+        print("❌ No swimmers found. Exiting.")
+        exit()
 
-results = []
+    results = []
 
-for swimmer_name in swimmers_list:
-    print(f"\n--- Processing: {swimmer_name} ---")
+    for swimmer_name in swimmers_list:
+        print(f"\n--- Processing: {swimmer_name} ---")
 
-    task_search = Task(
-        description=f"""
-        Search for '{swimmer_name}' (Israeli Olympic Swimmer). 
-        Find their current Job Title and Company.
-        Verification: Ensure it is the swimmer, not a different person.
-        """,
-        expected_output="Profile with Name, Role, and Company.",
-        agent=researcher,
-    )
+        # UPDATED TASK: Changed "Olympic Swimmer" to "Israeli Swimmer"
+        # to handle the national-level athletes in your new list.
+        task_search = Task(
+            description=f"""
+            Conduct a deep investigation for the Israeli swimmer: '{swimmer_name}'.
+            
+            STEP 1: TRANSLITERATE & SEARCH
+            - Search in Hebrew: "{swimmer_name} LinkedIn"
+            - Search in English: Guess the English spelling (e.g., '{swimmer_name}' -> 'Name Surname') and search "Name Surname Israel swimmer LinkedIn".
+            
+            STEP 2: VERIFICATION (CRITICAL)
+            - You MUST confirm this is the swimmer, not a random person with the same name.
+            - Look for these "Identity Anchors" in their profile:
+              * Mention of "Swimming", "Swimmer", "Olympic", "National Team".
+              * Education at "Wingate Institute" or a US University (common for Israeli athletes).
+              * Volunteering or past roles involving "Maccabi", "Hapoel", or sports associations.
+            
+            STEP 3: EXTRACT
+            - If confirmed, extract: Current Job Title, Company, and LinkedIn URL.
+            - If you are unsure (e.g., found 3 "Avi Cohens" and none mention swimming), return "Unverified".
+            """,
+            expected_output="Profile with English Name, Current Role, Company, and Verification Method.",
+            agent=researcher,
+        )
 
-    task_analyze = Task(
-        description=f"""
-        Analyze the role found for '{swimmer_name}'.
-        Is it a 'Key Position' based on your rules?
-        
-        Output ONLY a JSON format:
-        {{
-            "name": "{swimmer_name}",
-            "role": "...",
-            "company": "...",
-            "is_key": "Yes/No",
-            "reason": "Why you decided Yes or No"
-        }}
-        """,
-        expected_output="JSON object.",
-        agent=analyst,
-        context=[task_search],
-    )
+        task_analyze = Task(
+            description=f"""
+            Analyze the role found for '{swimmer_name}'.
+            Is it a 'Key Position' based on your rules?
+            
+            Output ONLY a JSON format:
+            {{
+                "name": "{swimmer_name}",
+                "role": "...",
+                "company": "...",
+                "is_key": "Yes/No",
+                "reason": "Why you decided Yes or No"
+            }}
+            """,
+            expected_output="JSON object.",
+            agent=analyst,
+            context=[task_search],
+        )
 
-    crew = Crew(
-        agents=[researcher, analyst],
-        tasks=[task_search, task_analyze],
-        process=Process.sequential,
-    )
+        crew = Crew(
+            agents=[researcher, analyst],
+            tasks=[task_search, task_analyze],
+            process=Process.sequential,
+        )
 
-    output = crew.kickoff()
-    results.append(output)
+        output = crew.kickoff()
+        results.append(output)
 
-save_results_to_csv(results)
+    save_results_to_csv(results)
