@@ -1,18 +1,18 @@
-# 1. Start with a lightweight Linux version that has Python 3.11 installed
+# Use a lightweight, official Python image
 FROM python:3.11-slim
 
-# 2. Set the working directory inside the container to /app
+# Set the working directory inside the container
 WORKDIR /app
 
-# 3. Copy the requirements file into the container
+# Copy the requirements file first (for better caching)
 COPY requirements.txt .
 
-# 4. Install the tools inside the container
-# We add --no-cache-dir to keep the container small
+# Install dependencies
+# --no-cache-dir keeps the image small
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copy source code (main.py, scraper.py, .env) into the container
+# Copy the rest of your code into the container
 COPY . .
 
-# 6. Command to run when the container starts
+# Command to run your script
 CMD ["python", "main.py"]
